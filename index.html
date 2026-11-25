@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulador bancario</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Plan: dos mundos. Cliente = banco claro y sereno. Servidor = consola oscura "detrás de cámara". */
+:root{
+  --navy:#0E1A2B; --navy-2:#16263D; --line-d:#2A3F5C; --teal:#2EC4B6; --teal-d:#0A6F67;
+  --paper:#F3F6F8; --card:#FFFFFF; --ink:#13202F; --mute:#5B6B7D; --line:#D8E0E7;
+  --ok:#3DDC97; --ok-d:#117A52; --bad:#FF6B6B; --bad-d:#B3261E; --amber:#F2B84B; --txt-d:#D7E0EC; --mute-d:#8FA2BC;
+  --sans:'IBM Plex Sans',Arial,sans-serif; --mono:'IBM Plex Mono',Consolas,monospace;
+  color-scheme: light;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{font-family:var(--sans);background:var(--navy);color:var(--ink);font-size:16px;line-height:1.45}
+button,input,select{font:inherit}
+:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--navy);color:var(--txt-d);border-bottom:1px solid var(--line-d)}
+.top h1{margin:0;font-size:18px;font-weight:600;letter-spacing:.2px}
+.top h1 span{color:var(--mute-d);font-weight:400;margin-left:10px;font-size:14px}
+.tabs{display:flex;gap:6px;background:#0A1424;padding:4px;border-radius:10px}
+.tab{border:0;background:transparent;color:var(--mute-d);padding:8px 16px;border-radius:7px;cursor:pointer;font-weight:500}
+.tab[aria-selected="true"]{background:var(--teal);color:var(--navy);font-weight:600}
+
+main{display:grid;gap:0;min-height:calc(100vh - 62px)}
+body[data-view="cliente"] #p-servidor{display:none}
+body[data-view="servidor"] #p-cliente{display:none}
+body[data-view="lado"] main{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+@media (max-width:1000px){body[data-view="lado"] main{grid-template-columns:1fr}}
+
+/* ---------- CLIENTE ---------- */
+#p-cliente{background:var(--paper);padding:20px}
+.browser{max-width:1000px;margin:0 auto;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--card);box-shadow:0 8px 30px rgba(14,26,43,.12)}
+.bar{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#E7ECF1;border-bottom:1px solid var(--line)}
+.dots{display:flex;gap:6px}.dots i{width:11px;height:11px;border-radius:50%;background:#B7C2CD;display:block}
+.url{flex:1;background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 12px;font-size:14px;color:var(--mute);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bank-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;padding:18px 24px;background:var(--teal-d);color:#fff}
+.bank-head b{font-size:20px}
+.bank-head span{opacity:.9;font-size:14px}
+.head-right{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.acct{background:#fff;color:var(--ink);padding:10px 16px;border-radius:10px;min-width:220px}
+.acct small{display:block;color:var(--mute);font-size:13px}
+.acct strong{font-size:24px;font-variant-numeric:tabular-nums}
+.logout{border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.12);color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500}
+.logout:hover{background:rgba(255,255,255,.22)}
+
+/* Login box */
+.login-wrap{padding:40px 24px;display:flex;justify-content:center;background:#F8FAFC}
+.login-card{width:100%;max-width:440px;border:1px solid var(--line);border-radius:12px;padding:24px;background:#fff;box-shadow:0 4px 16px rgba(14,26,43,.05)}
+.login-card h2{margin:0 0 6px;font-size:21px}
+.login-card p{margin:0 0 18px;color:var(--mute);font-size:14px}
+.quick-dnis{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line);display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--mute)}
+.quick-dnis button{border:1px solid #B9C4CF;background:#F8FAFC;color:var(--ink);padding:4px 10px;border-radius:999px;cursor:pointer;font-family:var(--mono);font-size:12px}
+.quick-dnis button:hover{border-color:var(--teal-d);color:var(--teal-d)}
+
+.body{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:20px;padding:24px}
+@media (max-width:820px){.body{grid-template-columns:1fr}}
+.card{border:1px solid var(--line);border-radius:12px;padding:20px;background:#fff}
+.card h2{margin:0 0 4px;font-size:20px}
+.card p.sub{margin:0 0 16px;color:var(--mute);font-size:14px}
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.field label{font-weight:600;font-size:14px}
+.field input,.field select{border:1px solid #B9C4CF;border-radius:8px;padding:10px 12px;background:#fff;color:var(--ink);min-height:44px}
+.field .hint{font-size:13px;color:var(--mute)}
+.err{color:var(--bad-d);font-size:14px;min-height:20px;margin:-6px 0 8px}
+.pay{width:100%;min-height:48px;border:0;border-radius:10px;background:var(--teal-d);color:#fff;font-weight:600;font-size:17px;cursor:pointer}
+.pay:hover{background:#085a54}
+.pay:disabled{background:#8AA6A3;cursor:not-allowed}
+.status{min-height:150px}
+.status .empty{color:var(--mute);font-size:15px}
+.steps{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:8px}
+.steps li{display:flex;align-items:center;gap:10px;font-size:15px;color:var(--mute)}
+.steps li b{width:22px;height:22px;border-radius:50%;border:2px solid #B9C4CF;display:inline-flex;align-items:center;justify-content:center;font-size:12px;flex:none}
+.steps li.active{color:var(--ink);font-weight:600}
+.steps li.active b{border-color:var(--teal-d);color:var(--teal-d)}
+.steps li.done{color:var(--ink)}
+.steps li.done b{background:var(--ok-d);border-color:var(--ok-d);color:#fff}
+.steps li.fail b{background:var(--bad-d);border-color:var(--bad-d);color:#fff}
+.badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;font-weight:700;font-size:16px}
+.badge.ok{background:#DDF5EA;color:var(--ok-d)}
+.badge.bad{background:#FBE3E1;color:var(--bad-d)}
+.badge.wait{background:#E8EEF3;color:var(--ink)}
+.result-note{margin:10px 0 0;font-size:15px}
+.moves{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.moves li{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:8px 0;font-size:15px}
+.moves .amt{font-variant-numeric:tabular-nums;white-space:nowrap}
+.tagk{font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;margin-left:8px}
+.tagk.ok{background:#DDF5EA;color:var(--ok-d)}.tagk.bad{background:#FBE3E1;color:var(--bad-d)}
+.demo{margin:0 24px 24px;border:2px dashed #B9C4CF;border-radius:12px;padding:16px;background:#FAFBFC}
+.demo h3{margin:0 0 4px;font-size:15px}
+.demo p{margin:0 0 12px;color:var(--mute);font-size:14px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{border:1px solid #B9C4CF;background:#fff;color:var(--ink);padding:8px 14px;border-radius:999px;cursor:pointer;font-size:14px;min-height:40px}
+.chip:hover{border-color:var(--teal-d);color:var(--teal-d)}
+.switch{display:inline-flex;align-items:center;gap:8px;font-size:14px;margin-left:8px}
+.switch input{width:20px;height:20px}
+
+/* ---------- SERVIDOR ---------- */
+#p-servidor{background:var(--navy);color:var(--txt-d);padding:20px;min-width:0}
+.s-head{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between;margin-bottom:16px}
+.s-head h2{margin:0;font-size:20px;font-weight:600}
+.s-head p{margin:2px 0 0;color:var(--mute-d);font-size:14px}
+.s-ctrl{display:flex;gap:10px;align-items:center;font-size:14px;color:var(--mute-d)}
+.s-ctrl select,.s-ctrl button{background:var(--navy-2);color:var(--txt-d);border:1px solid var(--line-d);border-radius:8px;padding:7px 12px;cursor:pointer;min-height:38px}
+.pill{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:14px;padding:5px 12px;border-radius:999px;background:var(--navy-2);border:1px solid var(--line-d)}
+.pill.on{border-color:var(--teal);color:var(--teal)}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:1250px){body:not([data-view="servidor"]) .grid{grid-template-columns:1fr}}
+@media (max-width:760px){.grid{grid-template-columns:1fr}}
+.panel{background:#101F36;border:1px solid var(--line-d);border-radius:12px;padding:16px;min-width:0}
+.panel.wide{grid-column:1/-1}
+.panel h3{margin:0 0 2px;font-size:16px;font-weight:600}
+.panel .cap{margin:0 0 12px;color:var(--mute-d);font-size:13px}
+svg{display:block;width:100%;height:auto}
+.edge{stroke:#34506F;stroke-width:3}
+.node circle{fill:#16263D;stroke:#4B6A90;stroke-width:3}
+.node text{fill:var(--txt-d);font-family:var(--sans);text-anchor:middle}
+.node .id{font-weight:700;font-size:16px}
+.node .nm{font-size:13px;fill:var(--mute-d)}
+.node .bd{font-size:15px;font-weight:700}
+.node.active circle{stroke:var(--teal);fill:#12414A;animation:pulse 1s ease-in-out infinite}
+.node.ok circle{stroke:var(--ok);fill:#123C33}.node.ok .bd{fill:var(--ok)}
+.node.fail circle{stroke:var(--bad);fill:#432029}.node.fail .bd{fill:var(--bad)}
+.node.skip circle{stroke:#6F7F94;fill:#1B2536;stroke-dasharray:5 4}.node.skip .bd{fill:#9AA9BC}
+@keyframes pulse{50%{stroke-width:6}}
+@media (prefers-reduced-motion:reduce){.node.active circle{animation:none;stroke-width:6}}
+.order{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px;font-family:var(--mono);font-size:14px}
+.order span.c{padding:4px 10px;border-radius:6px;background:var(--navy-2);border:1px solid var(--line-d)}
+.order span.c.active{border-color:var(--teal);color:var(--teal)}
+.order span.c.done{border-color:#3B7A66;color:var(--ok)}
+.order i{color:var(--mute-d);font-style:normal}
+.vars{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+.var{font-family:var(--mono);padding:8px 12px;border-radius:8px;background:var(--navy-2);border:1px solid var(--line-d);min-width:128px}
+.var small{display:block;color:var(--mute-d);font-family:var(--sans);font-size:12px}
+.var b{font-size:18px}
+.var.t b{color:var(--ok)}.var.f b{color:var(--bad)}
+table.tv{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:15px}
+.tv th,.tv td{padding:6px 10px;text-align:center;border-bottom:1px solid var(--line-d)}
+.tv th{color:var(--mute-d);font-weight:500}
+.tv td:last-child,.tv th:last-child{text-align:left}
+.tv tr.cur{background:#12414A}
+.tv tr.cur.win{background:#123C33}
+.fsm .st rect{fill:#16263D;stroke:#4B6A90;stroke-width:2.5}
+.fsm .st text{fill:var(--txt-d);font-family:var(--mono);font-size:15px;font-weight:500;text-anchor:middle}
+.fsm .st.visited rect{stroke:var(--teal)}
+.fsm .st.active rect{fill:var(--teal);stroke:var(--teal)}
+.fsm .st.active text{fill:var(--navy);font-weight:700}
+.fsm .st.bad.active rect{fill:var(--bad);stroke:var(--bad)}
+.fsm .st rect.fin,.fsm .st.active rect.fin,.fsm .st.visited rect.fin{fill:none;stroke:#4B6A90;stroke-width:1.5}
+.fsm .tr{stroke:#5C7699;stroke-width:2.5;fill:none}
+.fsm .tr.lit{stroke:var(--teal)}
+.fsm .ev{fill:var(--amber);font-family:var(--mono);font-size:15px;font-weight:500;text-anchor:middle}
+.legend{margin:8px 0 0;color:var(--mute-d);font-size:13px}
+.log{height:230px;overflow:auto;background:#0A1424;border:1px solid var(--line-d);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:14px;line-height:1.55}
+.log div{white-space:pre-wrap;word-break:break-word}
+.log .t{color:#5F7390}.log .ok{color:var(--ok)}.log .bad{color:var(--bad)}.log .ev{color:var(--amber)}.log .sys{color:var(--teal)}
+</style>
+</head>
+<body data-view="cliente">
+<header class="top">
+  <h1>Simulador bancario<span>Matemática Discreta · backend de transacciones</span></h1>
+  <div class="tabs" role="tablist" aria-label="Vista">
+    <button class="tab" role="tab" id="t-cliente" aria-selected="true" data-v="cliente">Cliente</button>
+    <button class="tab" role="tab" id="t-servidor" aria-selected="false" data-v="servidor">Servidor (detrás de cámara)</button>
+    <button class="tab" role="tab" id="t-lado" aria-selected="false" data-v="lado">Lado a lado</button>
+  </div>
+</header>
+
+<main>
+<!-- ===================== CLIENTE ===================== -->
+<section id="p-cliente" aria-label="Página del cliente">
+  <div class="browser">
+    <div class="bar"><div class="dots"><i></i><i></i><i></i></div><div class="url" id="urlbar">banco-demo.example/ingresar</div></div>
+
+    <!-- VISTA 1: INICIO DE SESIÓN -->
+    <div id="view-login">
+      <div class="bank-head">
+        <div><b>Banco Demo</b><br><span>Banca por internet · Identificación de cliente</span></div>
+      </div>
+      <div class="login-wrap">
+        <div class="login-card">
+          <h2>Iniciar sesión</h2>
+          <p>Ingresa tu DNI de 8 dígitos para consultar tus datos en RENIEC y acceder a tu cuenta.</p>
+          <form id="login-form" novalidate>
+            <div class="field">
+              <label for="dni-input">Número de DNI</label>
+              <input id="dni-input" type="text" inputmode="numeric" maxlength="8" placeholder="Ej. 60845958" autocomplete="off">
+            </div>
+            <div class="err" id="login-err" role="alert"></div>
+            <button class="pay" id="btn-login" type="submit">Ingresar a mi cuenta</button>
+          </form>
+          <div class="quick-dnis">
+            <span>Prueba rápida:</span>
+            <button type="button" data-dni="60845958">60845958 (S/ 10k)</button>
+            <button type="button" data-dni="45128934">45128934</button>
+            <button type="button" data-dni="72910456">72910456</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VISTA 2: BANCA POR INTERNET (OCULTA HASTA INICIAR SESIÓN) -->
+    <div id="view-bank" hidden>
+      <div class="bank-head">
+        <div><b>Banco Demo</b><br><span id="welcome">Banca por internet · Hola, Cliente</span></div>
+        <div class="head-right">
+          <div class="acct"><small id="acct-dni">Saldo disponible · DNI --------</small><strong id="saldo">S/ 0.00</strong></div>
+          <button class="logout" id="btn-logout" type="button">Cambiar DNI</button>
+        </div>
+      </div>
+      <div class="body">
+        <div class="card">
+          <h2>Pagar una compra o servicio</h2>
+          <p class="sub">Revisa los datos y confirma con tu token de seguridad.</p>
+          <form id="form" novalidate>
+            <div class="field"><label for="dest">Comercio / Servicio</label>
+              <select id="dest">
+                <optgroup label="Transferencias y Billeteras">
+                  <option>Yape (Transferencia móvil)</option>
+                  <option>Plin (Transferencia interbancaria)</option>
+                  <option>BCP · Banco de Crédito del Perú</option>
+                  <option>Interbank</option>
+                  <option>BBVA Perú</option>
+                  <option>Scotiabank Perú</option>
+                </optgroup>
+                <optgroup label="Servicios Básicos y Telecom">
+                  <option>Sedapal (Agua y Alcantarillado)</option>
+                  <option>Luz del Sur</option>
+                  <option>Pluz Energía (ex Enel)</option>
+                  <option>Cálidda (Gas Natural)</option>
+                  <option>Claro Perú</option>
+                  <option>Movistar Perú</option>
+                  <option>Entel Perú</option>
+                </optgroup>
+                <optgroup label="Comercios y Tiendas">
+                  <option>Plaza Vea</option>
+                  <option>Tottus</option>
+                  <option>Metro / Wong</option>
+                  <option>Tambo+</option>
+                  <option>Rappi / PedidosYa</option>
+                  <option>Cineplanet</option>
+                </optgroup>
+              </select></div>
+            <div class="field"><label for="monto">Monto a pagar (S/)</label>
+              <input id="monto" type="number" inputmode="decimal" min="0" step="0.01" value="250.00"></div>
+            <div class="field"><label for="token">Token de seguridad (6 dígitos)</label>
+              <input id="token" type="text" inputmode="numeric" maxlength="6" value="482913" autocomplete="off">
+              <span class="hint">Para la demostración, el token válido es 482913.</span></div>
+            <div class="err" id="err" role="alert"></div>
+            <button class="pay" id="pagar" type="submit">Pagar</button>
+          </form>
+        </div>
+        <div style="display:grid;gap:20px;align-content:start">
+          <div class="card status" aria-live="polite">
+            <h2>Estado del pago</h2>
+            <div id="status"><p class="empty">Aún no hay operaciones. Cuando pagues, aquí verás cómo avanza.</p></div>
+          </div>
+          <div class="card">
+            <h2>Últimos movimientos</h2>
+            <ul class="moves" id="moves"></ul>
+          </div>
+        </div>
+      </div>
+      <div class="demo">
+        <h3>Panel de demostración (no es parte del banco)</h3>
+        <p>Elige un caso para llenar el formulario. Después pulsa “Pagar” y mira la pestaña Servidor.</p>
+        <div class="chips">
+          <button class="chip" type="button" data-case="ok">Pago normal</button>
+          <button class="chip" type="button" data-case="saldo">Saldo insuficiente</button>
+          <button class="chip" type="button" data-case="token">Token incorrecto</button>
+          <button class="chip" type="button" data-case="bloq">Cuenta bloqueada</button>
+          <label class="switch"><input type="checkbox" id="bloq"> Cuenta bloqueada</label>
+          <button class="chip" type="button" id="reset">Restablecer saldo</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SERVIDOR ===================== -->
+<section id="p-servidor" aria-label="Servidor">
+  <div class="s-head">
+    <div><h2>Servidor · lo que pasa detrás de cámara</h2><p>Cada pago recorre el árbol en Postorden, se evalúa F = A ∧ B ∧ C y el autómata cambia de estado.</p></div>
+    <div class="s-ctrl">
+      <span class="pill" id="txpill">Sin solicitudes</span>
+      <label for="speed">Velocidad</label>
+      <select id="speed"><option value="1100">Lenta</option><option value="650" selected>Normal</option><option value="250">Rápida</option></select>
+    </div>
+  </div>
+  <div class="grid">
+    <div class="panel">
+      <h3>1 · Árbol de la arquitectura (recorrido Postorden)</h3>
+      <p class="cap">Primero las bases de datos, luego los microservicios y al final la raíz.</p>
+      <svg viewBox="0 0 520 330" role="img" aria-label="Árbol de siete nodos: SC raíz, MA y MP, y las hojas UC, SB, HT y P" id="tree">
+        <g id="edges"></g><g id="nodes"></g>
+      </svg>
+      <div class="order" id="order"></div>
+    </div>
+    <div class="panel">
+      <h3>2 · Reglas de autorización</h3>
+      <p class="cap">Se aprueba solo si las tres condiciones son verdaderas.</p>
+      <div class="vars">
+        <div class="var" id="vA"><small>A · Fondos suficientes</small><b>?</b></div>
+        <div class="var" id="vB"><small>B · Token válido</small><b>?</b></div>
+        <div class="var" id="vC"><small>C · Cuenta no bloqueada</small><b>?</b></div>
+        <div class="var" id="vF"><small>F = A ∧ B ∧ C</small><b>?</b></div>
+      </div>
+      <table class="tv" aria-label="Tabla de verdad"><thead><tr><th>A</th><th>B</th><th>C</th><th>F</th><th>Resultado</th></tr></thead><tbody id="tv"></tbody></table>
+    </div>
+    <div class="panel wide">
+      <h3>3 · Autómata del ciclo de vida del pago</h3>
+      <p class="cap">e1 inicio de comprobación · e2 función evaluada con éxito (F = 1) · e3 con fracaso (F = 0) · e4 liquidación confirmada.</p>
+      <svg class="fsm" viewBox="0 0 700 230" role="img" aria-label="Autómata: CREADA, VALIDANDO, APROBADA, RECHAZADA y CONCILIADA" id="fsm">
+        <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5C7699"/></marker></defs>
+        <line class="tr" id="e1" x1="140" y1="110" x2="188" y2="110" marker-end="url(#ah)"/>
+        <line class="tr" id="e2" x1="310" y1="100" x2="378" y2="62" marker-end="url(#ah)"/>
+        <line class="tr" id="e3" x1="310" y1="120" x2="378" y2="158" marker-end="url(#ah)"/>
+        <line class="tr" id="e4" x1="500" y1="55" x2="548" y2="55" marker-end="url(#ah)"/>
+        <text class="ev" x="164" y="98">e1</text><text class="ev" x="334" y="70">e2</text><text class="ev" x="334" y="168">e3</text><text class="ev" x="524" y="44">e4</text>
+        <g class="st" id="s-CREADA"><rect x="20" y="85" width="120" height="50" rx="10"/><text x="80" y="115">CREADA</text></g>
+        <g class="st" id="s-VALIDANDO"><rect x="190" y="85" width="120" height="50" rx="10"/><text x="250" y="115">VALIDANDO</text></g>
+        <g class="st" id="s-APROBADA"><rect x="380" y="30" width="120" height="50" rx="10"/><text x="440" y="60">APROBADA</text></g>
+        <g class="st bad" id="s-RECHAZADA"><rect class="fin" x="374" y="134" width="132" height="62" rx="13"/><rect x="380" y="140" width="120" height="50" rx="10"/><text x="440" y="170">RECHAZADA</text></g>
+        <g class="st" id="s-CONCILIADA"><rect class="fin" x="544" y="24" width="142" height="62" rx="13"/><rect x="550" y="30" width="130" height="50" rx="10"/><text x="615" y="60">CONCILIADA</text></g>
+      </svg>
+      <p class="legend">Borde doble: estado final. El estado resaltado es el actual.</p>
+    </div>
+    <div class="panel wide">
+      <h3>Registro del servidor</h3>
+      <p class="cap">Lo que el backend va haciendo, paso a paso.</p>
+      <div class="log" id="log" role="log" aria-live="off"></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<script>
+(function(){
+  /* ========================================================================
+     TOKEN DE API DNI CONFIGURADO
+     ======================================================================== */
+  var API_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MzA4MCJ9.07qBx--RROo5JzySaF6VGVTaHvAbTmQcCpPktEOeyOA';
+
+  var $=function(id){return document.getElementById(id)};
+  var SVGNS='http://www.w3.org/2000/svg';
+
+  /* ---------- Vistas ---------- */
+  function setView(v){
+    document.body.setAttribute('data-view',v);
+    ['cliente','servidor','lado'].forEach(function(k){$('t-'+k).setAttribute('aria-selected',String(k===v))});
+  }
+  document.querySelectorAll('.tab').forEach(function(b){b.addEventListener('click',function(){setView(b.dataset.v)})});
+
+  /* ---------- Árbol ---------- */
+  var NODES={SC:{x:260,y:46,n:'Servidor Central'},MA:{x:130,y:140,n:'Autenticación y Cuentas'},MP:{x:390,y:140,n:'Procesamiento de Pagos'},
+    UC:{x:65,y:255,n:'BD Usuarios'},SB:{x:195,y:255,n:'BD Saldos'},HT:{x:325,y:255,n:'BD Historial'},P:{x:455,y:255,n:'Pasarela externa'}};
+  var EDGES=[['SC','MA'],['SC','MP'],['MA','UC'],['MA','SB'],['MP','HT'],['MP','P']];
+  var ORDER=['UC','SB','MA','HT','P','MP','SC'];
+  function el(tag,attrs,parent){var e=document.createElementNS(SVGNS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e}
+  EDGES.forEach(function(p){var a=NODES[p[0]],b=NODES[p[1]];el('line',{class:'edge',x1:a.x,y1:a.y,x2:b.x,y2:b.y},$('edges'))});
+  var nodeEls={};
+  ORDER.forEach(function(id){
+    var n=NODES[id],g=el('g',{class:'node'},$('nodes'));
+    el('circle',{cx:n.x,cy:n.y,r:30},g);
+    var t=el('text',{x:n.x,y:n.y+6,class:'id'},g);t.textContent=id;
+    var nm=el('text',{x:n.x,y:n.y+50,class:'nm'},g);nm.textContent=n.n;
+    var bd=el('text',{x:n.x+34,y:n.y-24,class:'bd'},g);
+    nodeEls[id]={g:g,bd:bd};
+  });
+  var chips={};
+  ORDER.forEach(function(id,i){
+    var c=document.createElement('span');c.className='c';c.textContent=id;$('order').appendChild(c);chips[id]=c;
+    if(i<ORDER.length-1){var a=document.createElement('i');a.textContent='→';$('order').appendChild(a)}
+  });
+  function setNode(id,st,badge){nodeEls[id].g.setAttribute('class','node '+(st||''));nodeEls[id].bd.textContent=badge||''}
+  function setChip(id,st){chips[id].className='c '+(st||'')}
+
+  /* ---------- Tabla de verdad ---------- */
+  var tvRows=[];
+  for(var i=0;i<8;i++){
+    var a=(i>>2)&1,b=(i>>1)&1,c=i&1,f=a&b&c,tr=document.createElement('tr');
+    tr.innerHTML='<td>'+a+'</td><td>'+b+'</td><td>'+c+'</td><td>'+f+'</td><td>'+(f?'Aprueba':'Rechaza')+'</td>';
+    if(f)tr.classList.add('win');
+    $('tv').appendChild(tr);tvRows.push(tr);
+  }
+  function setVar(id,v){var e=$(id);e.className='var'+(v===null?'':(v?' t':' f'));e.querySelector('b').textContent=v===null?'?':(v?'1 · sí':'0 · no')}
+  function showRow(a,b,c){tvRows.forEach(function(r,i){r.classList.toggle('cur',i===a*4+b*2+c)})}
+
+  /* ---------- Autómata ---------- */
+  var STATES=['CREADA','VALIDANDO','APROBADA','RECHAZADA','CONCILIADA'];
+  function setState(s){
+    STATES.forEach(function(k){var g=$('s-'+k);g.classList.remove('active');if(k===s){g.classList.add('active','visited')}});
+  }
+  function lit(id){$(id).classList.add('lit')}
+  function resetFsm(){STATES.forEach(function(k){$('s-'+k).classList.remove('active','visited')});['e1','e2','e3','e4'].forEach(function(e){$(e).classList.remove('lit')});$('s-CREADA').classList.add('active','visited')}
+
+  /* ---------- Registro ---------- */
+  var t0=0;
+  function log(msg,cls){
+    var d=document.createElement('div'),s=((Date.now()-t0)/1000).toFixed(1);
+    d.innerHTML='<span class="t">['+('   '+s).slice(-5)+'s]</span> <span class="'+(cls||'')+'"></span>';
+    d.lastChild.textContent=msg;$('log').appendChild(d);$('log').scrollTop=$('log').scrollHeight;
+  }
+
+  /* ---------- Sesión, DNI y Saldo dinámico ---------- */
+  var currentDni='',currentName='',saldoInicial=1500,saldo=1500,txn=0,busy=false;
+  var VALID_TOKEN='482913';
+  function money(n){return 'S/ '+n.toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2})}
+
+  function calcularSaldoPorDni(dni){
+    if(dni==='60845958') return 10000;
+    var hash=0;
+    for(var i=0;i<dni.length;i++){hash=(hash*31+dni.charCodeAt(i))%4501}
+    return Math.round((350+hash)/10)*10;
+  }
+
+  function extraerNombreDeJson(data){
+    if(!data) return null;
+    var d=data.data||data;
+    if(d.nombre_completo) return d.nombre_completo;
+    if(d.nombreCompleto) return d.nombreCompleto;
+    var partes=[d.nombres,d.apellido_paterno||d.apellidoPaterno,d.apellido_materno||d.apellidoMaterno].filter(Boolean);
+    return partes.length?partes.join(' '):null;
+  }
+
+  async function consultarNombreApi(dni){
+    var q=encodeURIComponent(dni);
+    var endpoints=[
+      {url:'https://api.factiliza.com/v1/dni/info/'+q, bearer:true},
+      {url:'https://dniruc.apisperu.com/api/v1/dni/'+q+'?token='+encodeURIComponent(API_TOKEN), bearer:false},
+      {url:'https://api.peruapi.com/v1/dni/'+q, bearer:true}
+    ];
+    for(var i=0;i<endpoints.length;i++){
+      try{
+        var ep=endpoints[i];
+        var headers={'Accept':'application/json'};
+        if(ep.bearer && API_TOKEN) headers['Authorization']='Bearer '+API_TOKEN;
+        var res=await fetch(ep.url,{headers:headers});
+        if(!res.ok) continue;
+        var data=await res.json();
+        var nombre=extraerNombreDeJson(data);
+        if(nombre) return nombre;
+      }catch(e){}
+    }
+    return null;
+  }
+
+  function capitalizar(txt){
+    return txt.toLowerCase().replace(/\b\w/g,function(l){return l.toUpperCase()});
+  }
+
+  document.querySelectorAll('[data-dni]').forEach(function(btn){
+    btn.addEventListener('click',function(){$('dni-input').value=btn.dataset.dni;$('login-err').textContent=''});
+  });
+
+  $('login-form').addEventListener('submit',async function(ev){
+    ev.preventDefault();
+    var dni=$('dni-input').value.trim();
+    if(!/^\d{8}$/.test(dni)){$('login-err').textContent='Ingresa un DNI válido de 8 dígitos.';return}
+    $('login-err').textContent='';
+    $('btn-login').disabled=true;
+    $('btn-login').textContent='Consultando DNI…';
+
+    var nombreApi=await consultarNombreApi(dni);
+    currentDni=dni;
+    currentName=nombreApi?capitalizar(nombreApi):('Cliente DNI '+dni);
+    saldoInicial=calcularSaldoPorDni(dni);
+    saldo=saldoInicial;
+
+    $('welcome').textContent='Banca por internet · Hola, '+currentName;
+    $('acct-dni').textContent='Cuenta de ahorros · DNI '+currentDni;
+    $('saldo').textContent=money(saldo);
+    $('urlbar').textContent='banco-demo.example/pagar';
+    $('moves').innerHTML='<li><span>Saldo inicial de cuenta</span><span class="amt">+ '+money(saldoInicial)+'</span></li>';
+    $('status').innerHTML='<p class="empty">Aún no hay operaciones. Cuando pagues, aquí verás cómo avanza.</p>';
+    $('bloq').checked=false;
+
+    $('view-login').hidden=true;
+    $('view-bank').hidden=false;
+    $('btn-login').disabled=false;
+    $('btn-login').textContent='Ingresar a mi cuenta';
+    log('Sesión iniciada: '+currentName+' (DNI '+currentDni+') · Saldo '+money(saldo),'sys');
+  });
+
+  $('btn-logout').addEventListener('click',function(){
+    if(busy)return;
+    $('view-bank').hidden=true;
+    $('view-login').hidden=false;
+    $('urlbar').textContent='banco-demo.example/ingresar';
+    $('dni-input').value='';
+    $('login-err').textContent='';
+    resetServer();
+    $('txpill').textContent='Sin solicitudes';
+    $('txpill').classList.remove('on');
+    log('Sesión cerrada. Esperando nuevo DNI.','sys');
+  });
+
+  /* ---------- Cliente: pagos ---------- */
+  var STEPS=['Solicitud recibida','Validando en el servidor','Resultado','Pago conciliado con el banco'];
+  function renderSteps(states,head){
+    var h=head||'';
+    var html=h+'<ul class="steps">';
+    STEPS.forEach(function(s,i){var st=states[i]||'';html+='<li class="'+st+'"><b>'+(st==='done'?'✓':st==='fail'?'✕':(i+1))+'</b>'+s+'</li>'});
+    $('status').innerHTML=html+'</ul>';
+  }
+  var cs=['','','',''];
+  function cstep(i,st,head){cs[i]=st;renderSteps(cs,head)}
+  function addMove(dest,monto,ok){
+    var li=document.createElement('li');
+    li.innerHTML='<span></span><span class="amt"></span>';
+    li.children[0].textContent=dest;
+    var tag=document.createElement('span');tag.className='tagk '+(ok?'ok':'bad');tag.textContent=ok?'Aprobado':'Rechazado';li.children[0].appendChild(tag);
+    li.children[1].textContent=(ok?'− ':'')+money(monto);
+    $('moves').insertBefore(li,$('moves').firstChild);
+  }
+
+  document.querySelectorAll('[data-case]').forEach(function(b){b.addEventListener('click',function(){
+    var c=b.dataset.case;$('bloq').checked=false;$('monto').value='250.00';$('token').value=VALID_TOKEN;$('err').textContent='';
+    if(c==='saldo')$('monto').value=(saldo+500).toFixed(2);
+    if(c==='token')$('token').value='000000';
+    if(c==='bloq')$('bloq').checked=true;
+  })});
+  $('reset').addEventListener('click',function(){if(busy)return;saldo=saldoInicial;$('saldo').textContent=money(saldo)});
+
+  $('form').addEventListener('submit',function(ev){
+    ev.preventDefault();if(busy)return;
+    var monto=parseFloat($('monto').value),tok=$('token').value.trim();
+    if(!(monto>0)){$('err').textContent='Ingresa un monto mayor que cero.';return}
+    if(!/^\d{6}$/.test(tok)){$('err').textContent='El token tiene 6 dígitos.';return}
+    $('err').textContent='';
+    run({id:'TX-'+('000'+(++txn)).slice(-4),dni:currentDni,dest:$('dest').value,monto:monto,token:tok,bloqueada:$('bloq').checked});
+  });
+
+  /* ---------- Servidor: procesamiento ---------- */
+  function wait(){return new Promise(function(r){setTimeout(r,parseInt($('speed').value,10))})}
+  function resetServer(){
+    ORDER.forEach(function(id){setNode(id,'');setChip(id,'')});
+    ['vA','vB','vC','vF'].forEach(function(v){setVar(v,null)});
+    tvRows.forEach(function(r){r.classList.remove('cur')});
+    resetFsm();
+  }
+  resetServer();
+  log('Servidor en espera. Inicia sesión con tu DNI en la pestaña Cliente.','sys');
+
+  async function run(tx){
+    busy=true;$('pagar').disabled=true;$('pagar').textContent='Procesando…';
+    t0=Date.now();$('log').innerHTML='';resetServer();
+    $('txpill').textContent=tx.id+' · en proceso';$('txpill').classList.add('on');
+    cs=['','','',''];
+    cstep(0,'done','<span class="badge wait">En proceso</span>');
+    log('POST /pagos  '+tx.id+'  dni='+tx.dni+'  comercio="'+tx.dest+'"  monto='+money(tx.monto),'sys');
+    log('Estado inicial: CREADA');
+    await wait();
+    log('e1: inicio de comprobación lógica','ev');lit('e1');setState('VALIDANDO');cstep(1,'active','<span class="badge wait">En proceso</span>');
+    var A=null,B=null,C=null,F=null;
+    for(var i=0;i<ORDER.length;i++){
+      var id=ORDER[i];setNode(id,'active');setChip(id,'active');
+      await wait();
+      if(id==='UC'){B=(tx.token===VALID_TOKEN);setVar('vB',B);setNode(id,B?'ok':'fail',B?'✓':'✕');log('UC · credenciales (DNI '+tx.dni+'): token '+(B?'válido  → B = 1':'incorrecto  → B = 0'),B?'ok':'bad')}
+      else if(id==='SB'){A=tx.monto<=saldo;setVar('vA',A);setNode(id,A?'ok':'fail',A?'✓':'✕');log('SB · saldo '+money(saldo)+' '+(A?'≥':'<')+' '+money(tx.monto)+(A?'  → A = 1':'  → A = 0 (fondos insuficientes)'),A?'ok':'bad')}
+      else if(id==='MA'){C=!tx.bloqueada;setVar('vC',C);F=(A&&B&&C)?1:0;setVar('vF',!!F);showRow(+A,+B,+C);
+        setNode(id,C?'ok':'fail',C?'✓':'✕');log('MA · cuenta '+(C?'activa  → C = 1':'bloqueada  → C = 0'),C?'ok':'bad');
+        log('MA · F = A ∧ B ∧ C = '+(+A)+' ∧ '+(+B)+' ∧ '+(+C)+' = '+F,F?'ok':'bad')}
+      else if(id==='HT'){setNode(id,'ok','✓');log('HT · intento registrado en el historial')}
+      else if(id==='P'){if(F){setNode(id,'ok','✓');log('P · pasarela lista para liquidar con el banco externo','ok')}else{setNode(id,'skip','–');log('P · omitido: F = 0, no se liquida nada','bad')}}
+      else if(id==='MP'){if(F){setNode(id,'ok','✓');log('MP · pago confirmado con la pasarela','ok')}else{setNode(id,'skip','–');log('MP · no se procesa el pago','bad')}}
+      else if(id==='SC'){
+        if(F){setNode(id,'ok','✓');log('SC · todos los nodos hijos confirmaron','ok')}else{setNode(id,'fail','✕');log('SC · hay confirmaciones negativas: se rechaza','bad')}
+      }
+      setChip(id,'done');
+    }
+    await wait();
+    if(F){
+      log('e2: función evaluada con éxito (F = 1)','ev');lit('e2');setState('APROBADA');
+      cstep(1,'done');cstep(2,'done','<span class="badge ok">✓ Pago aprobado</span>');cstep(3,'active','<span class="badge ok">✓ Pago aprobado</span>');
+      await wait();
+      log('e4: liquidación interbancaria confirmada','ev');lit('e4');setState('CONCILIADA');
+      saldo-=tx.monto;$('saldo').textContent=money(saldo);addMove(tx.dest,tx.monto,true);
+      cstep(3,'done','<span class="badge ok">✓ Pago aprobado</span>');
+      $('status').insertAdjacentHTML('beforeend','<p class="result-note">Comprobante '+tx.id+'. Se descontaron '+money(tx.monto)+' de tu cuenta.</p>');
+      log('Estado final: CONCILIADA. Nuevo saldo '+money(saldo),'ok');
+    }else{
+      var why=[];if(!A)why.push('fondos insuficientes');if(!B)why.push('token incorrecto');if(!C)why.push('cuenta bloqueada');
+      log('e3: función evaluada con fracaso (F = 0)','ev');lit('e3');setState('RECHAZADA');
+      cstep(1,'done');cstep(2,'fail','<span class="badge bad">✕ Pago rechazado</span>');
+      addMove(tx.dest,tx.monto,false);
+      $('status').insertAdjacentHTML('beforeend','<p class="result-note"><b>Motivo:</b> '+why.join(' y ')+'. No se cobró nada.</p>');
+      log('Estado final: RECHAZADA ('+why.join(', ')+')','bad');
+    }
+    $('txpill').textContent=tx.id+(F?' · conciliada':' · rechazada');
+    busy=false;$('pagar').disabled=false;$('pagar').textContent='Pagar';
+  }
+})();
+</script>
+</body>
+</html>
